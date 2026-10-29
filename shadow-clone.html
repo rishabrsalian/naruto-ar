@@ -3,16 +3,45 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Naruto Shadow Clone</title>
+  <title>Naruto — Shadow Clone Jutsu</title>
   <link rel="stylesheet" href="shadow-clone.css">
+  <style>
+    .home-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.5rem;
+    }
+    .home-link {
+      color: #f97316;
+      text-decoration: none;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+    .key-hint {
+      color: #94a3b8;
+      font-size: 0.8rem;
+    }
+    .key-badge {
+      background: rgba(255, 255, 255, 0.1);
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: #fff;
+    }
+  </style>
 </head>
 <body>
   <div class="container">
     <div class="card">
+      <div class="home-bar">
+        <a href="index.html" class="home-link">🍥 Naruto AR Home</a>
+        <span class="key-hint">Trigger: <span class="key-badge">SPACE</span> or <span class="key-badge">C</span> | Reset: <span class="key-badge">R</span></span>
+      </div>
+
       <h1>Naruto Shadow Clone</h1>
 
       <div id="confidence-container" class="confidence-container">
-        <div class="confidence-text">Confidence:</div>
+        <div class="confidence-text">Cross Seal Match:</div>
         <div class="confidence">0%</div>
       </div>
 
@@ -23,7 +52,7 @@
         <canvas id="canvas"></canvas>
 
         <!-- Overlay button -->
-        <button class="video-overlay-btn">
+        <button class="video-overlay-btn" title="Click or Press SPACE to summon Shadow Clones">
           <img id="overlayImg" src="assets/state-1.png" data-state="1" alt="overlay button" />
         </button>
       </div>

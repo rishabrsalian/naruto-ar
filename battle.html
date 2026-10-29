@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Naruto AR — Ninja Battle Arena (+10 Points)</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675466862/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3.1675466124/drawing_utils.js" crossorigin="anonymous"></script>
+
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #060608;
+      overflow: hidden;
+      font-family: 'Outfit', sans-serif;
+      color: #e4e4ec;
+      user-select: none;
+    }
+
+    #v_src, #out {
+      position: absolute; top: 0; left: 0;
+      width: 100vw; height: 100vh;
+      object-fit: cover;
+      transform: scaleX(-1);
+    }
+    #out { z-index: 2; pointer-events: none; }
+
+    .fx {
+      position: absolute; height: auto; top: 0; left: 0;
+      transform: translate(-50%, -50%);
+      pointer-events: none; display: none;
+      mix-blend-mode: screen; z-index: 20;
+      will-change: left, top, width, opacity;
+    }
+    #n, #n2 { width: 500px; }
+    #s { width: 700px; }
+
+    /* Top HUD */
+    .battle-header {
+      position: absolute;
+      top: 1rem;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 30;
+      display: flex;
+      align-items: center;
+      gap: 1.25rem;
+      background: rgba(13, 13, 18, 0.88);
+      backdrop-filter: blur(14px);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      border-radius: 999px;
+      padding: 0.5rem 1.25rem;
+      box-shadow: 0 8px 32px rgba(239, 68, 68, 0.25);
+    }
+
+    .home-btn {
+      color: #f97316;
+      text-decoration: none;
+      font-weight: 700;
+      padding-right: 0.75rem;
+      border-right: 1px solid #1a1a24;
+      font-size: 0.9rem;
+    }
+
+    .stat-box {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .stat-label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #8b8b9e;
+      font-weight: 600;
+    }
+    .stat-num {
+      font-size: 1.35rem;
+      font-weight: 800;
+      color: #fff;
+      font-variant-numeric: tabular-nums;
+    }
+    .stat-num.gold {
+      color: #f59e0b;
+      text-shadow: 0 0 10px rgba(245, 158, 11, 0.6);
+    }
+
+    .jutsu-toggle {
+      background: rgba(0, 0, 0, 0.5);
+      border: 1px solid #3b82f6;
+      color: #93c5fd;
+      padding: 0.35rem 0.75rem;
+      border-radius: 999px;
+      font-family: inherit;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      outline: none;
+    }
+
+    /* Bottom Guide */
+    .battle-guide {
+      position: absolute;
+      bottom: 1.25rem;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 30;
+      background: rgba(13, 13, 18, 0.85);
+      backdrop-filter: blur(12px);
+      border: 1px solid #1a1a24;
+      border-radius: 999px;
+      padding: 0.55rem 1.4rem;
+      color: #94a3b8;
+      font-size: 0.85rem;
+      text-align: center;
+      pointer-events: none;
+    }
+    .battle-guide b { color: #fff; }
+    .battle-guide .pts { color: #f59e0b; font-weight: 700; }
+  </style>
+</head>
+<body>
+
+  <!-- Top Battle Stats HUD -->
+  <header class="battle-header">
+    <a href="index.html" class="home-btn">🍥 Naruto AR Home</a>
+    
+    <div class="stat-box">
+      <span class="stat-label">Score:</span>
+      <span id="scoreText" class="stat-num gold">0</span>
+    </div>
+
+    <div class="stat-box">
+      <span class="stat-label">Best:</span>
+      <span id="bestText" class="stat-num">0</span>
+    </div>
+
+    <div class="stat-box">
+      <span class="stat-label">Defeated:</span>
+      <span id="defeatedText" class="stat-num">0</span>
+    </div>
+
+    <select id="jutsuSelect" class="jutsu-toggle">
+      <option value="twin-rasengan">🌀 Twin Rasengan (Both Hands)</option>
+      <option value="rasengan-chidori">⚡ Rasengan (L) + Chidori (R)</option>
+    </select>
+  </header>
+
+  <div class="battle-guide">
+    Open your palm to summon <b>Rasengan / Chidori</b>. Touch running rogue ninjas to lit them up for <span class="pts">+10 Points</span>!
+  </div>
+
+  <video id="v_src" autoplay playsinline></video>
+  <canvas id="out"></canvas>
+
+  <!-- Video Overlays for Left & Right Hand Rasengan/Chidori -->
+  <video id="n" class="fx" src="assets/naruto.mp4" muted autoplay loop playsinline></video>
+  <video id="n2" class="fx" src="assets/naruto.mp4" muted autoplay loop playsinline></video>
+  <video id="s" class="fx" src="assets/sasuke.mp4" muted autoplay loop playsinline></video>
+
+  <script>
+    // Web Audio Synthesizer
+    let audioCtx = null;
+    function playHitSound() {
+      try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const now = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(340, now);
+        osc.frequency.exponentialRampToValueAtTime(30, now + 0.28);
+        gain.gain.setValueAtTime(0.35, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.28);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(now);
+        osc.stop(now + 0.29);
+      } catch (e) {}
+    }
+
+    const vElement = document.getElementById('v_src');
+    const cElement = document.getElementById('out');
+    const ctx = cElement.getContext('2d');
+    const n = document.getElementById('n');
+    const n2 = document.getElementById('n2');
+    const s = document.getElementById('s');
+    const jutsuSelect = document.getElementById('jutsuSelect');
+    const scoreText = document.getElementById('scoreText');
+    const bestText = document.getElementById('bestText');
+    const defeatedText = document.getElementById('defeatedText');
+
+    let currentLoadout = 'twin-rasengan';
+    jutsuSelect.addEventListener('change', (e) => { currentLoadout = e.target.value; });
+
+    let score = 0;
+    let best = parseInt(localStorage.getItem('naruto_battle_best') || '0', 10);
+    let defeated = 0;
+    bestText.textContent = best;
+
+    let pwr = [0, 0];
+    let wasOpen = [false, false];
+    let handPositions = [null, null];
+
+    // Preloaded Smoke Sprites
+    const smokeFrames = [];
+    for (let i = 1; i <= 5; i++) {
+      const img = new Image();
+      img.src = `assets/smoke_1/${i}.png`;
+      smokeFrames.push(img);
+    }
+
+    const activeSmokes = [];
+    function spawnSmoke(x, y) {
+      activeSmokes.push({ x, y, start: performance.now(), duration: 500 });
+    }
+
+    // Running Rogue Ninjas
+    const enemies = [];
+    const floatingScores = [];
+    const sparkParticles = [];
+    let lastSpawn = 0;
+
+    class RogueNinja {
+      constructor() {
+        this.dir = Math.random() < 0.5 ? 1 : -1;
+        this.x = this.dir === 1 ? -70 : (window.innerWidth + 70);
+        this.y = window.innerHeight * (0.35 + Math.random() * 0.45);
+        this.speed = (3.5 + Math.random() * 3.5) * this.dir;
+        this.frame = Math.random() * 100;
+        this.isDefeated = false;
+        this.alpha = 1;
+      }
+
+      update() {
+        this.x += this.speed;
+        this.frame += 0.25;
+        return (this.dir === 1 && this.x > window.innerWidth + 90) ||
+               (this.dir === -1 && this.x < -90) ||
+               (this.isDefeated && this.alpha <= 0);
+      }
+
+      draw(c) {
+        c.save();
+        c.translate(this.x, this.y);
+        c.scale(this.dir, 1);
+        c.globalAlpha = Math.max(0, this.alpha);
+
+        const runCycle = Math.sin(this.frame);
+        const legCycle = Math.cos(this.frame);
+
+        c.fillStyle = '#0f172a';
+        c.strokeStyle = '#334155';
+        c.lineWidth = 1.5;
+
+        // Torso
+        c.beginPath();
+        c.ellipse(0, -25, 12, 18, 0.4, 0, Math.PI * 2);
+        c.fill(); c.stroke();
+
+        // Head
+        c.beginPath();
+        c.arc(10, -48, 10, 0, Math.PI * 2);
+        c.fillStyle = '#1e293b';
+        c.fill();
+
+        // Glowing red visor / Sharingan
+        c.fillStyle = '#ef4444';
+        c.shadowColor = '#ef4444';
+        c.shadowBlur = 8;
+        c.beginPath();
+        c.ellipse(14, -48, 3.5, 2, 0, 0, Math.PI * 2);
+        c.fill();
+        c.shadowBlur = 0;
+
+        // Waving headband
+        c.strokeStyle = '#dc2626';
+        c.lineWidth = 2.5;
+        c.beginPath();
+        c.moveTo(2, -48);
+        c.quadraticCurveTo(-15, -48 + Math.sin(this.frame * 1.5) * 6, -32, -48 + Math.sin(this.frame * 1.5 + 1) * 8);
+        c.stroke();
+
+        // Arms trailing behind
+        c.strokeStyle = '#0f172a';
+        c.lineWidth = 4;
+        c.beginPath();
+        c.moveTo(0, -28);
+        c.lineTo(-24, -20 + runCycle * 3);
+        c.stroke();
+
+        // Running Legs
+        c.strokeStyle = '#020617';
+        c.lineWidth = 4.5;
+        c.beginPath();
+        c.moveTo(0, -10);
+        c.lineTo(12 + runCycle * 14, 5 + Math.max(0, legCycle * 10));
+        c.stroke();
+        c.beginPath();
+        c.moveTo(0, -10);
+        c.lineTo(-14 - runCycle * 14, 5 + Math.max(0, -legCycle * 10));
+        c.stroke();
+
+        c.restore();
+      }
+    }
+
+    function checkOpen(pts) {
+      let count = 0;
+      const wrist = pts[0];
+      const tips = [8, 12, 16, 20];
+      const pips = [6, 10, 14, 18];
+      for (let i = 0; i < tips.length; i++) {
+        if (Math.hypot(pts[tips[i]].x - wrist.x, pts[tips[i]].y - wrist.y) >
+            Math.hypot(pts[pips[i]].x - wrist.x, pts[pips[i]].y - wrist.y)) count++;
+      }
+      return count >= 3;
+    }
+
+    function onResults(res) {
+      cElement.width = vElement.videoWidth;
+      cElement.height = vElement.videoHeight;
+      ctx.save();
+      ctx.clearRect(0, 0, cElement.width, cElement.height);
+
+      let handActive = [false, false];
+      n.style.display = 'none';
+      n2.style.display = 'none';
+      s.style.display = 'none';
+
+      if (res.multiHandLandmarks && res.multiHandedness) {
+        res.multiHandLandmarks.forEach((pts, i) => {
+          const isR = res.multiHandedness[i].label === 'Right';
+          const idx = isR ? 1 : 0;
+          handActive[idx] = true;
+
+          // Electric red/cyan battle hand skeleton
+          ctx.save();
+          ctx.shadowBlur = 10;
+          ctx.shadowColor = '#00fbff';
+          drawConnectors(ctx, pts, HAND_CONNECTIONS, {color: '#00d4ff', lineWidth: 3});
+          drawLandmarks(ctx, pts, {color: '#ffffff', lineWidth: 1, radius: 2});
+          ctx.restore();
+
+          const open = checkOpen(pts);
+          pwr[idx] += open ? 0.05 : -0.12;
+          pwr[idx] = Math.max(0, Math.min(1, pwr[idx]));
+
+          const wrist = pts[0];
+          const knk = pts[9];
+          const handSpan = Math.hypot(pts[12].x - wrist.x, pts[12].y - wrist.y) * window.innerWidth;
+          const tx = (wrist.x + knk.x) / 2;
+          const ty = (wrist.y + knk.y) / 2;
+          const posX = (1 - tx) * window.innerWidth;
+          const posY = ty * window.innerHeight;
+
+          if (open && !wasOpen[idx]) {
+            const vid = (currentLoadout === 'twin-rasengan') ? (idx === 0 ? n : n2) : (idx === 0 ? n : s);
+            vid.currentTime = 0;
+            vid.play().catch(() => {});
+          }
+          wasOpen[idx] = open;
+
+          if (pwr[idx] > 0.01) {
+            handPositions[idx] = { x: posX, y: posY, radius: 85 };
+            if (currentLoadout === 'twin-rasengan') {
+              const vid = (idx === 0) ? n : n2;
+              vid.style.width = `${Math.max(300, Math.min(850, handSpan * 3.6))}px`;
+              vid.style.left = `${posX}px`;
+              vid.style.top = `${posY}px`;
+              vid.style.display = 'block';
+              vid.style.opacity = pwr[idx];
+            } else {
+              if (idx === 0) {
+                n.style.width = `${Math.max(300, Math.min(850, handSpan * 3.6))}px`;
+                n.style.left = `${posX}px`;
+                n.style.top = `${posY}px`;
+                n.style.display = 'block';
+                n.style.opacity = pwr[0];
+              } else {
+                s.style.width = `${Math.max(380, Math.min(1000, handSpan * 4.4))}px`;
+                s.style.left = `${posX}px`;
+                s.style.top = `${posY}px`;
+                s.style.display = 'block';
+                s.style.opacity = pwr[1];
+              }
+            }
+          } else {
+            handPositions[idx] = null;
+          }
+        });
+      }
+
+      if (!handActive[0]) { pwr[0] = Math.max(0, pwr[0] - 0.12); handPositions[0] = null; }
+      if (!handActive[1]) { pwr[1] = Math.max(0, pwr[1] - 0.12); handPositions[1] = null; }
+
+      // ----------------------------------------------------
+      // Ninja Battle Logic (Drawn on Canvas)
+      // ----------------------------------------------------
+      const now = performance.now();
+      if (now - lastSpawn > 1350) {
+        enemies.push(new RogueNinja());
+        lastSpawn = now;
+      }
+
+      // Check collision between active hands and running ninjas
+      for (let i = enemies.length - 1; i >= 0; i--) {
+        const e = enemies[i];
+        const isOff = e.update();
+
+        if (!e.isDefeated) {
+          for (let h = 0; h < 2; h++) {
+            const hand = handPositions[h];
+            if (hand && pwr[h] > 0.15) {
+              const d = Math.hypot(e.x - hand.x, (e.y - 25) - hand.y);
+              if (d < hand.radius + 35) {
+                // LIT ENEMY UP! +10 Points!
+                e.isDefeated = true;
+                e.alpha = 0;
+                score += 10;
+                defeated++;
+                scoreText.textContent = score;
+                defeatedText.textContent = defeated;
+
+                if (score > best) {
+                  best = score;
+                  bestText.textContent = best;
+                  localStorage.setItem('naruto_battle_best', best.toString());
+                }
+
+                playHitSound();
+                spawnSmoke(e.x, e.y - 25);
+                floatingScores.push({ x: e.x, y: e.y - 40, text: '+10', alpha: 1, vy: -2.2 });
+                break;
+              }
+            }
+          }
+        }
+
+        if (isOff) enemies.splice(i, 1);
+        else e.draw(ctx);
+      }
+
+      // Draw Smoke Animations
+      for (let i = activeSmokes.length - 1; i >= 0; i--) {
+        const smk = activeSmokes[i];
+        const elapsed = now - smk.start;
+        const frameIdx = Math.floor((elapsed / smk.duration) * 5);
+        if (frameIdx >= 5) {
+          activeSmokes.splice(i, 1);
+          continue;
+        }
+        const img = smokeFrames[frameIdx];
+        if (img && img.complete) {
+          ctx.save();
+          ctx.drawImage(img, smk.x - 45, smk.y - 45, 90, 90);
+          ctx.restore();
+        }
+      }
+
+      // Draw Floating Scores
+      for (let i = floatingScores.length - 1; i >= 0; i--) {
+        const f = floatingScores[i];
+        f.y += f.vy;
+        f.alpha -= 0.025;
+        if (f.alpha <= 0) {
+          floatingScores.splice(i, 1);
+          continue;
+        }
+        ctx.save();
+        ctx.globalAlpha = f.alpha;
+        ctx.font = '800 28px "Outfit", sans-serif';
+        ctx.fillStyle = '#f59e0b';
+        ctx.shadowColor = '#f59e0b';
+        ctx.shadowBlur = 10;
+        ctx.textAlign = 'center';
+        ctx.fillText(f.text, f.x, f.y);
+        ctx.restore();
+      }
+
+      ctx.restore();
+    }
+
+    const h = new Hands({
+      locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${f}`
+    });
+
+    h.setOptions({
+      maxNumHands: 2,
+      modelComplexity: 1,
+      minDetectionConfidence: 0.65,
+      minTrackingConfidence: 0.65
+    });
+
+    h.onResults(onResults);
+
+    const cam = new Camera(vElement, {
+      onFrame: async () => { await h.send({ image: vElement }); },
+      width: 1280, height: 720
+    });
+    cam.start();
+  </script>
+</body>
+</html>
