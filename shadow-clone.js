@@ -83,7 +83,7 @@ const customClones = [
 // ----------------------
 const selfie = new SelfieSegmentation({
   locateFile: (f) =>
-    `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${f}`,
+    `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation@0.1.1675465747/${f}`,
 });
 selfie.setOptions({ modelSelection: 1 });
 selfie.onResults((r) => (mask = r.segmentationMask));
@@ -93,7 +93,7 @@ selfie.onResults((r) => (mask = r.segmentationMask));
 // ----------------------
 const holistic = new Holistic({
   locateFile: (f) =>
-    `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${f}`,
+    `https://cdn.jsdelivr.net/npm/@mediapipe/holistic@0.5.1675471629/${f}`,
 });
 holistic.setOptions({
   modelComplexity: 1,

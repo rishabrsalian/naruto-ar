@@ -1,581 +1,1279 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Naruto — Ninja Jutsu</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap"
-      rel="stylesheet"
-    />
-    <style>
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Naruto AR — Unified Ninja Jutsu</title>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
-      :root {
-        --bg: #060608;
-        --surface: #0d0d12;
-        --border: #1a1a24;
-        --text: #e4e4ec;
-        --muted: #6b6b7b;
-        --accent-o: #f97316;
-        --accent-b: #3b82f6;
-        --accent-p: #a855f7;
-      }
+  <!-- Pinned Dependencies -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675466862/camera_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic@0.5.1675471629/holistic.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation@0.1.1675465747/selfie_segmentation.js"></script>
 
-      body {
-        font-family:
-          "Outfit",
-          -apple-system,
-          BlinkMacSystemFont,
-          sans-serif;
-        background: var(--bg);
-        color: var(--text);
-        min-height: 100dvh;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 2rem;
-      }
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
 
-      /* Subtle radial ambient behind the header */
-      body::before {
-        content: "";
-        position: fixed;
-        inset: 0;
-        background:
-          radial-gradient(
-            ellipse 60% 50% at 50% 20%,
-            rgba(249, 115, 22, 0.06) 0%,
-            transparent 70%
-          ),
-          radial-gradient(
-            ellipse 40% 40% at 80% 80%,
-            rgba(59, 130, 246, 0.04) 0%,
-            transparent 70%
-          );
-        pointer-events: none;
-        z-index: 0;
-      }
+    :root {
+      --bg: #060608;
+      --surface: #0d0d12;
+      --surface-glass: rgba(13, 13, 18, 0.85);
+      --border: #1a1a24;
+      --border-glow: rgba(255, 255, 255, 0.1);
+      --text: #e4e4ec;
+      --muted: #8b8b9e;
+      --accent-o: #f97316; /* Shadow clone orange */
+      --accent-b: #3b82f6; /* Rasengan & Chidori blue */
+      --accent-p: #a855f7; /* Combined purple */
+      --accent-g: #10b981; /* Trainer green */
+    }
 
-      .container {
-        max-width: 780px;
-        width: 100%;
-        position: relative;
-        z-index: 1;
-      }
+    body {
+      font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+      user-select: none;
+    }
 
-      /* ---- Header ---- */
-      .header {
-        text-align: center;
-        margin-bottom: 3.5rem;
-      }
+    /* Video feed (hidden source) & Master Canvas */
+    #video { display: none; }
 
-      .logo {
-        display: inline-block;
-        font-size: 2.75rem;
-        margin-bottom: 1rem;
-        filter: drop-shadow(0 0 20px rgba(249, 115, 22, 0.3));
-        animation: logo-float 4s ease-in-out infinite;
-      }
+    #canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      object-fit: cover;
+      z-index: 1;
+    }
 
-      @keyframes logo-float {
-        0%,
-        100% {
-          transform: translateY(0);
-        }
-        50% {
-          transform: translateY(-6px);
-        }
-      }
+    /* Dynamic visual vignette for cinematic chakra energy */
+    .vignette {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 3;
+      background: radial-gradient(circle at center, transparent 40%, rgba(6, 6, 8, 0.6) 100%);
+      transition: opacity 0.5s ease;
+    }
 
-      h1 {
-        font-size: 2.25rem;
-        font-weight: 700;
-        color: #fff;
-        letter-spacing: -0.02em;
-        line-height: 1.15;
-      }
+    .vignette.darkness-boost {
+      background: radial-gradient(circle at center, rgba(0, 20, 40, 0.15) 30%, rgba(3, 5, 12, 0.75) 100%);
+      mix-blend-mode: multiply;
+    }
 
-      .subtitle {
-        color: var(--muted);
-        font-size: 0.95rem;
-        margin-top: 0.625rem;
-        max-width: 440px;
-        margin-inline: auto;
-        line-height: 1.55;
-      }
+    /* FX Video Overlays */
+    .fx {
+      position: absolute;
+      height: auto;
+      top: 0;
+      left: 0;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      display: none;
+      mix-blend-mode: screen;
+      z-index: 20;
+      will-change: transform, opacity, left, top;
+    }
 
-      /* ---- Lang switch ---- */
-      .lang-switch {
-        display: flex;
-        justify-content: center;
-        gap: 0.375rem;
-        margin-bottom: 2.25rem;
-      }
+    /* Top HUD Navigation Bar */
+    .hud-header {
+      position: absolute;
+      top: 1rem;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 30;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      background: var(--surface-glass);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 0.5rem 0.85rem;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+      max-width: 95vw;
+      transition: all 0.3s ease;
+    }
 
-      .lang-btn {
-        background: transparent;
-        border: 1px solid var(--border);
-        color: var(--muted);
-        padding: 5px 14px;
-        border-radius: 999px;
-        cursor: pointer;
-        font-size: 0.8rem;
-        font-weight: 500;
-        font-family: inherit;
-        letter-spacing: 0.02em;
-        transition: all 0.25s ease;
-      }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding-left: 0.5rem;
+      padding-right: 0.75rem;
+      border-right: 1px solid var(--border);
+      font-weight: 700;
+      font-size: 0.95rem;
+      letter-spacing: -0.01em;
+      color: #fff;
+      cursor: default;
+    }
 
-      .lang-btn:hover {
-        border-color: rgba(249, 115, 22, 0.4);
-        color: var(--text);
-      }
+    .brand-icon {
+      font-size: 1.25rem;
+      filter: drop-shadow(0 0 8px rgba(249, 115, 22, 0.4));
+      animation: float-icon 3s ease-in-out infinite;
+    }
 
-      .lang-btn.active {
-        background: rgba(249, 115, 22, 0.1);
-        border-color: var(--accent-o);
-        color: var(--accent-o);
-      }
+    @keyframes float-icon {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-3px); }
+    }
 
-      /* ---- Cards ---- */
-      .cards {
-        display: flex;
+    /* Mode selector tabs */
+    .mode-tabs {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    .tab-btn {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--muted);
+      padding: 0.45rem 0.9rem;
+      border-radius: 999px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 0.825rem;
+      font-weight: 600;
+      transition: all 0.25s ease;
+    }
+
+    .tab-btn:hover {
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .tab-btn.active[data-mode="combined"] {
+      background: rgba(168, 85, 247, 0.15);
+      border-color: var(--accent-p);
+      color: var(--accent-p);
+      box-shadow: 0 0 16px rgba(168, 85, 247, 0.25);
+    }
+
+    .tab-btn.active[data-mode="ninja"] {
+      background: rgba(59, 130, 246, 0.15);
+      border-color: var(--accent-b);
+      color: var(--accent-b);
+      box-shadow: 0 0 16px rgba(59, 130, 246, 0.25);
+    }
+
+    .tab-btn.active[data-mode="shadow"] {
+      background: rgba(249, 115, 22, 0.15);
+      border-color: var(--accent-o);
+      color: var(--accent-o);
+      box-shadow: 0 0 16px rgba(249, 115, 22, 0.25);
+    }
+
+    .tab-btn.active[data-mode="trainer"] {
+      background: rgba(16, 185, 129, 0.15);
+      border-color: var(--accent-g);
+      color: var(--accent-g);
+      box-shadow: 0 0 16px rgba(16, 185, 129, 0.25);
+    }
+
+    /* HUD Controls */
+    .hud-controls {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding-left: 0.5rem;
+      border-left: 1px solid var(--border);
+    }
+
+    .hud-btn {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 0.45rem 0.8rem;
+      border-radius: 999px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 0.775rem;
+      font-weight: 500;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    .hud-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: var(--border-glow);
+    }
+
+    .hud-btn.active {
+      background: rgba(59, 130, 246, 0.2);
+      border-color: var(--accent-b);
+      color: #93c5fd;
+    }
+
+    /* Confidence Pill */
+    .conf-badge {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--muted);
+      padding: 0.35rem 0.7rem;
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .conf-badge span {
+      color: var(--accent-o);
+    }
+
+    /* Bottom Instructions Floating Pill */
+    .hud-footer {
+      position: absolute;
+      bottom: 1.5rem;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 30;
+      display: flex;
+      align-items: center;
+      gap: 1.25rem;
+      background: var(--surface-glass);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 0.65rem 1.4rem;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+      font-size: 0.85rem;
+      color: var(--muted);
+      max-width: 90vw;
+      text-align: center;
+      pointer-events: auto;
+    }
+
+    .jutsu-guide {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .guide-item {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    .guide-key {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #fff;
+      padding: 2px 7px;
+      border-radius: 6px;
+      font-size: 0.725rem;
+      font-weight: 600;
+    }
+
+    .guide-text {
+      color: var(--text);
+      font-weight: 500;
+    }
+
+    /* Hand Sign Overlay Button (Interactive Clone Toggle) */
+    .video-overlay-btn {
+      position: absolute;
+      bottom: 5.5rem;
+      left: 50%;
+      transform: translateX(-50%);
+      transform-origin: center;
+      background: none;
+      border: none;
+      padding: 0;
+      cursor: pointer;
+      transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      z-index: 25;
+      display: none;
+    }
+
+    .video-overlay-btn.visible {
+      display: inline-flex;
+    }
+
+    .video-overlay-btn.pop {
+      transform: translateX(-50%) scale(1.25);
+    }
+
+    .video-overlay-btn img {
+      width: 100px;
+      height: auto;
+      filter: drop-shadow(0 0 16px rgba(249, 115, 22, 0.4));
+    }
+
+    /* Trainer Drawer / Slide-Over Modal */
+    .trainer-drawer {
+      position: absolute;
+      top: 5rem;
+      right: 1.5rem;
+      width: 380px;
+      max-height: calc(100vh - 7rem);
+      background: var(--surface-glass);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 1.5rem;
+      z-index: 40;
+      display: none;
+      flex-direction: column;
+      gap: 1.1rem;
+      overflow-y: auto;
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+      animation: slide-in 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .trainer-drawer.open {
+      display: flex;
+    }
+
+    @keyframes slide-in {
+      from { opacity: 0; transform: translateY(-10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .drawer-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .drawer-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .drawer-close {
+      background: transparent;
+      border: none;
+      color: var(--muted);
+      font-size: 1.25rem;
+      cursor: pointer;
+      line-height: 1;
+    }
+
+    .drawer-close:hover { color: #fff; }
+
+    .trainer-section {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .sec-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+    }
+
+    .btn-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.5rem;
+    }
+
+    .action-btn {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--border);
+      color: #fff;
+      padding: 0.65rem 0.75rem;
+      border-radius: 10px;
+      font-family: inherit;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.35rem;
+    }
+
+    .action-btn:hover {
+      background: rgba(255, 255, 255, 0.12);
+      border-color: var(--border-glow);
+    }
+
+    .action-btn.primary {
+      background: linear-gradient(135deg, #10b981, #059669);
+      border: none;
+      grid-column: span 2;
+      padding: 0.8rem;
+      box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);
+    }
+
+    .action-btn.primary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    .action-btn.danger {
+      color: #f87171;
+    }
+    .action-btn.danger:hover {
+      background: rgba(239, 68, 68, 0.15);
+      border-color: rgba(239, 68, 68, 0.4);
+    }
+
+    .stats-card {
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.75rem;
+      font-size: 0.825rem;
+      display: flex;
+      justify-content: space-around;
+      color: var(--muted);
+    }
+
+    .stats-card strong {
+      color: #fff;
+      font-size: 0.95rem;
+    }
+
+    .trainer-status-text {
+      font-size: 0.8rem;
+      color: var(--muted);
+      line-height: 1.45;
+      min-height: 2.2rem;
+    }
+
+    /* Loading / Permission Overlay */
+    .loader-overlay {
+      position: absolute;
+      inset: 0;
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      transition: opacity 0.4s ease;
+    }
+
+    .loader-overlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .spinner {
+      width: 48px;
+      height: 48px;
+      border: 3px solid rgba(249, 115, 22, 0.2);
+      border-top-color: var(--accent-o);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-bottom: 1.25rem;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    @media (max-width: 768px) {
+      .hud-header {
+        top: 0.75rem;
         flex-direction: column;
-        gap: 1rem;
+        border-radius: 20px;
+        padding: 0.65rem;
+        gap: 0.5rem;
       }
-
-      .card {
-        display: grid;
-        grid-template-columns: 1fr auto;
-        align-items: center;
-        gap: 1.5rem;
-        background: var(--surface);
-        border: 1px solid var(--border);
-        border-radius: 16px;
-        padding: 1.5rem 1.75rem;
-        text-decoration: none;
-        color: inherit;
-        transition:
-          border-color 0.3s ease,
-          box-shadow 0.3s ease,
-          transform 0.25s ease;
-        position: relative;
-        overflow: hidden;
-        cursor: pointer;
-      }
-
-      .card:hover {
-        transform: translateY(-2px);
-      }
-
-      .card::after {
-        content: "";
-        position: absolute;
-        inset: 0;
-        border-radius: inherit;
-        opacity: 0;
-        transition: opacity 0.35s ease;
-        pointer-events: none;
-        z-index: 0;
-      }
-
-      .card.combined:hover {
-        border-color: rgba(168, 85, 247, 0.5);
-        box-shadow:
-          0 0 40px rgba(168, 85, 247, 0.08),
-          inset 0 1px 0 rgba(168, 85, 247, 0.08);
-      }
-      .card.combined:hover::after {
-        background: radial-gradient(
-          ellipse 80% 120% at 0% 50%,
-          rgba(168, 85, 247, 0.06) 0%,
-          transparent 60%
-        );
-        opacity: 1;
-      }
-
-      .card.rasengan:hover {
-        border-color: rgba(59, 130, 246, 0.5);
-        box-shadow:
-          0 0 40px rgba(59, 130, 246, 0.08),
-          inset 0 1px 0 rgba(59, 130, 246, 0.08);
-      }
-      .card.rasengan:hover::after {
-        background: radial-gradient(
-          ellipse 80% 120% at 0% 50%,
-          rgba(59, 130, 246, 0.06) 0%,
-          transparent 60%
-        );
-        opacity: 1;
-      }
-
-      .card.shadow:hover {
-        border-color: rgba(249, 115, 22, 0.5);
-        box-shadow:
-          0 0 40px rgba(249, 115, 22, 0.08),
-          inset 0 1px 0 rgba(249, 115, 22, 0.08);
-      }
-      .card.shadow:hover::after {
-        background: radial-gradient(
-          ellipse 80% 120% at 0% 50%,
-          rgba(249, 115, 22, 0.06) 0%,
-          transparent 60%
-        );
-        opacity: 1;
-      }
-
-      .card-body {
-        position: relative;
-        z-index: 1;
-      }
-
-      .card-label {
-        font-size: 0.675rem;
-        font-weight: 600;
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
-        margin-bottom: 0.375rem;
-      }
-
-      .card.combined .card-label {
-        color: var(--accent-p);
-      }
-      .card.rasengan .card-label {
-        color: var(--accent-b);
-      }
-      .card.shadow .card-label {
-        color: var(--accent-o);
-      }
-
-      .card-title {
-        font-size: 1.2rem;
-        font-weight: 700;
-        color: #fff;
-        letter-spacing: -0.01em;
-        margin-bottom: 0.375rem;
-      }
-
-      .card-desc {
-        font-size: 0.85rem;
-        color: var(--muted);
-        line-height: 1.55;
-        max-width: 48ch;
-      }
-
-      .card-arrow {
-        position: relative;
-        z-index: 1;
-        width: 40px;
-        height: 40px;
-        border-radius: 999px;
-        background: rgba(255, 255, 255, 0.04);
-        border: 1px solid var(--border);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        flex-shrink: 0;
-        transition: all 0.3s ease;
-      }
-
-      .card:hover .card-arrow {
-        background: rgba(255, 255, 255, 0.08);
-        border-color: rgba(255, 255, 255, 0.15);
-        transform: translateX(3px);
-      }
-
-      .card-arrow svg {
-        width: 16px;
-        height: 16px;
-        color: var(--muted);
-        transition: color 0.3s ease;
-      }
-
-      .card:hover .card-arrow svg {
-        color: var(--text);
-      }
-
-      /* ---- Footer ---- */
-      .footer {
-        text-align: center;
-        margin-top: 3rem;
-        font-size: 0.8rem;
-        color: var(--muted);
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: center;
-        align-items: center;
-        gap: 0.75rem;
-      }
-
-      .footer a {
-        color: var(--muted);
-        text-decoration: none;
-        transition: color 0.2s ease;
-      }
-
-      .footer a:hover {
-        color: var(--accent-o);
-      }
-
-      .footer-dot {
-        width: 3px;
-        height: 3px;
-        border-radius: 50%;
-        background: var(--border);
-      }
-
-      .footer-note {
-        width: 100%;
-        margin-top: 0.25rem;
+      .brand { border-right: none; padding: 0; }
+      .hud-controls { border-left: none; padding: 0; }
+      .hud-footer {
+        bottom: 0.75rem;
+        padding: 0.5rem 1rem;
         font-size: 0.75rem;
-        opacity: 0.55;
       }
-
-      /* ---- Responsive ---- */
-      @media (max-width: 640px) {
-        body {
-          padding: 1.25rem;
-          align-items: flex-start;
-          padding-top: 3rem;
-        }
-
-        .logo {
-          font-size: 2.25rem;
-        }
-        h1 {
-          font-size: 1.6rem;
-        }
-        .subtitle {
-          font-size: 0.85rem;
-        }
-
-        .card {
-          grid-template-columns: 1fr;
-          padding: 1.25rem;
-        }
-
-        .card-arrow {
-          display: none;
-        }
+      .trainer-drawer {
+        width: calc(100vw - 2rem);
+        right: 1rem;
       }
+    }
+  </style>
+</head>
+<body>
 
-      /* Reduced motion */
-      @media (prefers-reduced-motion: reduce) {
-        .logo {
-          animation: none;
-        }
-        .card {
-          transition: none;
-        }
-        .card:hover {
-          transform: none;
-        }
-        .card:hover .card-arrow {
-          transform: none;
-        }
-      }
-    </style>
-  </head>
-  <body>
-    <div class="container">
-      <div class="header">
-        <div class="logo">🍥</div>
-        <h1 data-i18n="title">Naruto Ninja Jutsu</h1>
-        <p class="subtitle" data-i18n="subtitle">
-          Browser-based ninja powers powered by hand tracking and machine
-          learning
-        </p>
-      </div>
+  <!-- Loading State -->
+  <div id="loader" class="loader-overlay">
+    <div class="spinner"></div>
+    <div style="font-size: 1.1rem; font-weight: 600; color: #fff;">Awakening Chakra Sensors...</div>
+    <div style="font-size: 0.85rem; color: var(--muted); margin-top: 0.4rem;">Initializing Camera & MediaPipe Holistic Tracking</div>
+  </div>
 
-      <div class="lang-switch">
-        <button
-          class="lang-btn active"
-          data-lang="en"
-          aria-label="Switch to English"
-        >
-          EN
+  <!-- Master Canvas & Camera Video -->
+  <video id="video" autoplay playsinline></video>
+  <canvas id="canvas"></canvas>
+  <div id="vignette" class="vignette"></div>
+
+  <!-- Animated Video FX Layers -->
+  <video id="naruto-fx" class="fx" src="assets/naruto.mp4" muted autoplay loop playsinline></video>
+  <video id="sasuke-fx" class="fx" src="assets/sasuke.mp4" muted autoplay loop playsinline></video>
+
+  <!-- Interactive Hand Sign Overlay Button -->
+  <button id="overlayBtn" class="video-overlay-btn" title="Click to trigger Shadow Clone Jutsu">
+    <img id="overlayImg" src="assets/state-1.png" data-state="1" alt="Clone Sign" />
+  </button>
+
+  <!-- Top Floating HUD -->
+  <header class="hud-header">
+    <div class="brand">
+      <span class="brand-icon">🍥</span>
+      <span>Naruto AR</span>
+    </div>
+
+    <!-- Mode Switcher -->
+    <nav class="mode-tabs">
+      <button class="tab-btn active" data-mode="combined" title="Rasengan, Chidori & Clones simultaneously">
+        <span>🌀 All Jutsu</span>
+      </button>
+      <button class="tab-btn" data-mode="ninja" title="Focus on Rasengan & Chidori with Chakra Skeleton">
+        <span>⚡ Rasengan & Chidori</span>
+      </button>
+      <button class="tab-btn" data-mode="shadow" title="Focus on Shadow Clone Jutsu">
+        <span>👥 Shadow Clone</span>
+      </button>
+      <button class="tab-btn" data-mode="trainer" title="Train custom gestures">
+        <span>🎯 Trainer</span>
+      </button>
+    </nav>
+
+    <!-- Controls -->
+    <div class="hud-controls">
+      <div class="conf-badge">Seal: <span id="confText">0.0%</span></div>
+      <button id="btnSkeleton" class="hud-btn active" title="Toggle Hand Skeleton Mesh">
+        <span>Skeleton</span>
+      </button>
+      <button id="btnResetClones" class="hud-btn" title="Clear Clones">
+        <span>Reset</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Bottom Dynamic Instruction Pill -->
+  <footer class="hud-footer">
+    <div id="guideContent" class="jutsu-guide">
+      <!-- Injected based on active mode -->
+    </div>
+  </footer>
+
+  <!-- Slide-out Gesture Trainer Drawer -->
+  <aside id="trainerDrawer" class="trainer-drawer">
+    <div class="drawer-header">
+      <div class="drawer-title">Jutsu Model Trainer</div>
+      <button id="closeDrawer" class="drawer-close">&times;</button>
+    </div>
+
+    <div class="trainer-section">
+      <div class="sec-label">1. Collect Training Data</div>
+      <div class="btn-row">
+        <button id="btnRecClone" class="action-btn">
+          <span>● Clone Sign</span> <kbd class="guide-key">1</kbd>
         </button>
-        <button class="lang-btn" data-lang="zh" aria-label="Switch to Chinese">
-          中文
+        <button id="btnRecOther" class="action-btn">
+          <span>● Other Poses</span> <kbd class="guide-key">2</kbd>
         </button>
       </div>
-
-      <div class="cards">
-        <!-- Combined -->
-        <a href="naruto-combined.html" class="card combined">
-          <div class="card-body">
-            <div class="card-label" data-i18n="combined-label">All Jutsu</div>
-            <div class="card-title" data-i18n="combined-title">
-              Combined Ninja Powers
-            </div>
-            <p class="card-desc" data-i18n="combined-desc">
-              Rasengan, Chidori, and Shadow Clone in one immersive view. Trigger
-              all three effects simultaneously with different hand gestures.
-            </p>
-          </div>
-          <div class="card-arrow">
-            <svg
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path d="M3 8h10M9 4l4 4-4 4" />
-            </svg>
-          </div>
-        </a>
-
-        <!-- Ninja Powers -->
-        <a href="ninja-powers.html" class="card rasengan">
-          <div class="card-body">
-            <div class="card-label" data-i18n="ninja-label">Hand Signs</div>
-            <div class="card-title" data-i18n="ninja-title">Ninja Powers</div>
-            <p class="card-desc" data-i18n="ninja-desc">
-              Unleash Rasengan and Chidori with hand gestures. Real-time hand
-              tracking overlays animated jutsu effects on your webcam feed.
-            </p>
-          </div>
-          <div class="card-arrow">
-            <svg
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path d="M3 8h10M9 4l4 4-4 4" />
-            </svg>
-          </div>
-        </a>
-
-        <!-- Shadow Clone -->
-        <a href="shadow-clone.html" class="card shadow">
-          <div class="card-body">
-            <div class="card-label" data-i18n="clone-label">Trained Model</div>
-            <div class="card-title" data-i18n="clone-title">
-              Shadow Clone Jutsu
-            </div>
-            <p class="card-desc" data-i18n="clone-desc">
-              Perform a hand sign to trigger shadow clones with smoke effects.
-              Uses a custom-trained neural network to recognize your gesture in
-              real time.
-            </p>
-          </div>
-          <div class="card-arrow">
-            <svg
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path d="M3 8h10M9 4l4 4-4 4" />
-            </svg>
-          </div>
-        </a>
-      </div>
-
-      <div class="footer">
-        <a href="trainer.html" data-i18n="footer-trainer">Model Trainer</a>
-        <span class="footer-dot"></span>
-        <a
-          href="https://github.com/FavorPan/naruto"
-          target="_blank"
-          rel="noopener"
-          >GitHub</a
-        >
-        <span class="footer-note" data-i18n="footer-note"
-          >Shadow Clone and Combined require a local HTTP server and a trained
-          gesture model.</span
-        >
+      <div class="stats-card">
+        <div>Clone Sign: <strong id="cntClone">0</strong></div>
+        <div>Other Poses: <strong id="cntOther">0</strong></div>
       </div>
     </div>
 
-    <script>
-      const i18n = {
-        en: {
-          title: "Naruto Ninja Jutsu",
-          subtitle:
-            "Browser-based ninja powers powered by hand tracking and machine learning",
+    <div class="trainer-section">
+      <div class="sec-label">2. Train & Test</div>
+      <button id="btnTrainModel" class="action-btn primary">Train Neural Model</button>
+      <p id="trainerStatus" class="trainer-status-text">Collect at least 20 samples of each pose, then train.</p>
+    </div>
 
-          "combined-label": "All Jutsu",
-          "combined-title": "Combined Ninja Powers",
-          "combined-desc":
-            "Rasengan, Chidori, and Shadow Clone in one immersive view. Trigger all three effects simultaneously with different hand gestures.",
+    <div class="trainer-section">
+      <div class="sec-label">3. Data & Weights</div>
+      <div class="btn-row">
+        <button id="btnExportData" class="action-btn">Export Data</button>
+        <button id="btnImportData" class="action-btn">Import Data</button>
+        <button id="btnSaveModel" class="action-btn">Save Model</button>
+        <button id="btnClearData" class="action-btn danger">Clear Samples</button>
+      </div>
+      <input type="file" id="importInput" accept=".json" style="display: none;">
+    </div>
+  </aside>
 
-          "ninja-label": "Hand Signs",
-          "ninja-title": "Ninja Powers",
-          "ninja-desc":
-            "Unleash Rasengan and Chidori with hand gestures. Real-time hand tracking overlays animated jutsu effects on your webcam feed.",
+  <!-- Unified Application Core Script -->
+  <script>
+  (function() {
+    'use strict';
 
-          "clone-label": "Trained Model",
-          "clone-title": "Shadow Clone Jutsu",
-          "clone-desc":
-            "Perform a hand sign to trigger shadow clones with smoke effects. Uses a custom-trained neural network to recognize your gesture in real time.",
+    // ----------------------------------------------------
+    // State & Configurations
+    // ----------------------------------------------------
+    let currentMode = 'combined'; // 'combined' | 'ninja' | 'shadow' | 'trainer'
+    let showSkeleton = true;
+    let gestureModel = null;
+    let mask = null;
+    let clonesTriggered = false;
+    let cloneStartTime = null;
 
-          "footer-trainer": "Model Trainer",
-          "footer-note":
-            "Shadow Clone and Combined require a local HTTP server and a trained gesture model.",
-        },
-        zh: {
-          title: "火影忍者忍术",
-          subtitle: "基于浏览器的手部追踪与机器学习，释放忍者力量",
+    // Power charge states
+    let pwrRasengan = 0;
+    let pwrChidori = 0;
+    let wasOpenLeft = false;
+    let wasOpenRight = false;
 
-          "combined-label": "全术合一",
-          "combined-title": "综合忍术",
-          "combined-desc":
-            "螺旋丸、千鸟、影分身，一镜掌握。通过不同手势同时触发三种效果，全屏沉浸体验。",
+    // DOM Elements
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const vignette = document.getElementById('vignette');
+    const narutoFx = document.getElementById('naruto-fx');
+    const sasukeFx = document.getElementById('sasuke-fx');
+    const overlayBtn = document.getElementById('overlayBtn');
+    const overlayImg = document.getElementById('overlayImg');
+    const loader = document.getElementById('loader');
+    const confText = document.getElementById('confText');
+    const guideContent = document.getElementById('guideContent');
+    const btnSkeleton = document.getElementById('btnSkeleton');
+    const btnResetClones = document.getElementById('btnResetClones');
+    const trainerDrawer = document.getElementById('trainerDrawer');
+    const closeDrawer = document.getElementById('closeDrawer');
 
-          "ninja-label": "手印结印",
-          "ninja-title": "忍术",
-          "ninja-desc":
-            "通过手势释放螺旋丸和千鸟。实时手部追踪将动画忍术效果叠加在摄像头画面上。",
+    // ----------------------------------------------------
+    // Clones Setup
+    // ----------------------------------------------------
+    const customClones = [
+      { x: -100, y: 100, scale: 0.9,  delay: 850, smokeSpawned: false },
+      { x:  120, y: 100, scale: 0.85, delay: 1000, smokeSpawned: false },
+      { x: -180, y: 140, scale: 0.8,  delay: 1150, smokeSpawned: false },
+      { x: -140, y: 140, scale: 0.45, delay: 1180, smokeSpawned: false },
+      { x:  180, y: 160, scale: 0.7,  delay: 1300, smokeSpawned: false },
+      { x:  140, y: 160, scale: 0.4,  delay: 1320, smokeSpawned: false },
+      { x: -250, y: 140, scale: 0.7,  delay: 1450, smokeSpawned: false },
+      { x:  260, y: 160, scale: 0.65, delay: 1600, smokeSpawned: false },
+      { x: -100, y: 150, scale: 0.6,  delay: 2100, smokeSpawned: false },
+      { x:  100, y: 150, scale: 0.6,  delay: 2250, smokeSpawned: false },
+      { x: -200, y:  85, scale: 0.55, delay: 2500, smokeSpawned: false },
+      { x:  230, y:  85, scale: 0.5,  delay: 2650, smokeSpawned: false },
+    ];
 
-          "clone-label": "模型识别",
-          "clone-title": "影分身之术",
-          "clone-desc":
-            "结印触发影分身及烟雾效果。使用自定义训练的神经网络实时识别你的手势。",
+    // Preload Smoke Sprites
+    const SMOKE_FOLDERS = ['smoke_1', 'smoke_2', 'smoke_3'];
+    const SMOKE_FRAME_COUNT = 5;
+    const SMOKE_DURATION = 550;
+    const activeSmokes = [];
+    const preloadedSmoke = {};
 
-          "footer-trainer": "模型训练器",
-          "footer-note":
-            "影分身和综合忍术需要本地 HTTP 服务器和已训练的手势模型。",
-        },
-      };
-
-      let currentLang = "en";
-
-      function setLang(lang) {
-        currentLang = lang;
-        document.querySelectorAll(".lang-btn").forEach((btn) => {
-          btn.classList.toggle("active", btn.dataset.lang === lang);
-        });
-        document.querySelectorAll("[data-i18n]").forEach((el) => {
-          const key = el.dataset.i18n;
-          if (i18n[lang]?.[key]) {
-            el.innerHTML = i18n[lang][key];
-          }
-        });
-        document.documentElement.lang = lang === "zh" ? "zh-CN" : "en";
-        localStorage.setItem("naruto-lang", lang);
+    SMOKE_FOLDERS.forEach(folder => {
+      preloadedSmoke[folder] = [];
+      for (let i = 1; i <= SMOKE_FRAME_COUNT; i++) {
+        const img = new Image();
+        img.src = `assets/${folder}/${i}.png`;
+        preloadedSmoke[folder].push(img);
       }
+    });
 
-      document.querySelectorAll(".lang-btn").forEach((btn) => {
-        btn.addEventListener("click", () => setLang(btn.dataset.lang));
+    function spawnSmoke(x, y, scale) {
+      scale *= 1.25;
+      const folder = SMOKE_FOLDERS[Math.floor(Math.random() * SMOKE_FOLDERS.length)];
+      activeSmokes.push({ x, y, scale, start: performance.now(), frames: preloadedSmoke[folder] });
+    }
+
+    function drawSmokes() {
+      const now = performance.now();
+      for (let i = activeSmokes.length - 1; i >= 0; i--) {
+        const s = activeSmokes[i];
+        const elapsed = now - s.start;
+        const frameDuration = SMOKE_DURATION / SMOKE_FRAME_COUNT;
+        const frameIndex = Math.floor(elapsed / frameDuration);
+
+        if (frameIndex >= s.frames.length) {
+          activeSmokes.splice(i, 1);
+          continue;
+        }
+
+        const img = s.frames[frameIndex];
+        if (img && img.complete) {
+          ctx.save();
+          ctx.translate(s.x, s.y);
+          ctx.scale(s.scale, s.scale);
+          ctx.drawImage(img, -img.width / 2, -img.height / 2);
+          ctx.restore();
+        }
+      }
+    }
+
+    // Reusable offscreen canvas for person segmentation
+    const _offscreen = document.createElement('canvas');
+    const _offCtx = _offscreen.getContext('2d');
+
+    function grabPerson() {
+      if (!mask) return null;
+      _offscreen.width = canvas.width;
+      _offscreen.height = canvas.height;
+
+      _offCtx.save();
+      _offCtx.scale(-1, 1);
+      _offCtx.drawImage(mask, -canvas.width, 0, canvas.width, canvas.height);
+      _offCtx.restore();
+
+      _offCtx.globalCompositeOperation = 'source-in';
+      _offCtx.save();
+      _offCtx.scale(-1, 1);
+      _offCtx.drawImage(video, -canvas.width, 0, canvas.width, canvas.height);
+      _offCtx.restore();
+      _offCtx.globalCompositeOperation = 'source-over';
+
+      return _offscreen;
+    }
+
+    function drawClones(person) {
+      if (!person) return;
+      const now = performance.now();
+      const sorted = [...customClones].sort((a, b) => b.delay - a.delay);
+
+      sorted.forEach((cl) => {
+        if (now - cloneStartTime >= cl.delay) {
+          ctx.save();
+          ctx.translate(cl.x + canvas.width * (1 - cl.scale) / 2, cl.y);
+          ctx.scale(cl.scale, cl.scale);
+          ctx.drawImage(person, 0, 0);
+          ctx.restore();
+        }
       });
 
-      const saved = localStorage.getItem("naruto-lang");
-      if (saved) setLang(saved);
-    </script>
-  </body>
+      // Main person drawn in front
+      ctx.drawImage(person, 0, 0);
+    }
+
+    function triggerClones() {
+      if (clonesTriggered) return;
+      clonesTriggered = true;
+      cloneStartTime = performance.now();
+
+      // Animate sign button
+      overlayImg.src = 'assets/state-2.png';
+      overlayBtn.classList.add('pop');
+      setTimeout(() => overlayBtn.classList.remove('pop'), 300);
+    }
+
+    function resetClones() {
+      clonesTriggered = false;
+      cloneStartTime = null;
+      customClones.forEach(c => c.smokeSpawned = false);
+      activeSmokes.length = 0;
+      overlayImg.src = 'assets/state-1.png';
+    }
+
+    // ----------------------------------------------------
+    // Hand Tracking, Rasengan & Chidori
+    // ----------------------------------------------------
+    function checkOpen(lm) {
+      if (!lm || lm.length < 21) return false;
+      let count = 0;
+      const wrist = lm[0];
+      const tips = [8, 12, 16, 20];
+      const pips = [6, 10, 14, 18];
+      for (let i = 0; i < tips.length; i++) {
+        const tipDist = Math.hypot(lm[tips[i]].x - wrist.x, lm[tips[i]].y - wrist.y);
+        const pipDist = Math.hypot(lm[pips[i]].x - wrist.x, lm[pips[i]].y - wrist.y);
+        if (tipDist > pipDist) count++;
+      }
+      return count >= 3;
+    }
+
+    function updateRasengan(leftHand) {
+      if (currentMode === 'shadow') {
+        narutoFx.style.display = 'none';
+        return;
+      }
+      const open = leftHand ? checkOpen(leftHand) : false;
+      pwrRasengan += open ? 0.04 : -0.08;
+      pwrRasengan = Math.max(0, Math.min(1, pwrRasengan));
+
+      if (open && !wasOpenLeft) {
+        narutoFx.currentTime = 0;
+        narutoFx.play().catch(() => {});
+      }
+      wasOpenLeft = open;
+
+      if (pwrRasengan > 0.01 && leftHand) {
+        const wrist = leftHand[0];
+        const knk = leftHand[9];
+        const palmCenter = { x: (wrist.x + knk.x) / 2, y: (wrist.y + knk.y) / 2 };
+        const handSpan = Math.hypot(leftHand[12].x - wrist.x, leftHand[12].y - wrist.y) * window.innerWidth;
+
+        narutoFx.style.width = `${Math.max(300, Math.min(850, handSpan * 3.6))}px`;
+        narutoFx.style.left = `${(1 - palmCenter.x) * window.innerWidth}px`;
+        narutoFx.style.top = `${palmCenter.y * window.innerHeight}px`;
+        narutoFx.style.display = 'block';
+        narutoFx.style.opacity = pwrRasengan;
+      } else {
+        narutoFx.style.display = 'none';
+      }
+    }
+
+    function updateChidori(rightHand) {
+      if (currentMode === 'shadow') {
+        sasukeFx.style.display = 'none';
+        return;
+      }
+      const open = rightHand ? checkOpen(rightHand) : false;
+      pwrChidori += open ? 0.04 : -0.08;
+      pwrChidori = Math.max(0, Math.min(1, pwrChidori));
+
+      if (open && !wasOpenRight) {
+        sasukeFx.currentTime = 0;
+        sasukeFx.play().catch(() => {});
+      }
+      wasOpenRight = open;
+
+      if (pwrChidori > 0.01 && rightHand) {
+        const wrist = rightHand[0];
+        const knk = rightHand[9];
+        const palmCenter = { x: (wrist.x + knk.x) / 2, y: (wrist.y + knk.y) / 2 };
+        const handSpan = Math.hypot(rightHand[12].x - wrist.x, rightHand[12].y - wrist.y) * window.innerWidth;
+
+        sasukeFx.style.width = `${Math.max(380, Math.min(1000, handSpan * 4.4))}px`;
+        sasukeFx.style.left = `${(1 - palmCenter.x) * window.innerWidth}px`;
+        sasukeFx.style.top = `${palmCenter.y * window.innerHeight}px`;
+        sasukeFx.style.display = 'block';
+        sasukeFx.style.opacity = pwrChidori;
+      } else {
+        sasukeFx.style.display = 'none';
+      }
+    }
+
+    // Glowing Chakra Hand Skeleton
+    const FINGER_CHAINS = [
+      [0, 1, 2, 3, 4],
+      [0, 5, 6, 7, 8],
+      [0, 9, 10, 11, 12],
+      [0, 13, 14, 15, 16],
+      [0, 17, 18, 19, 20],
+      [0, 5, 9, 13, 17, 0] // Palm loop
+    ];
+
+    function drawChakraHand(lm, glowColor) {
+      if (!showSkeleton || !lm) return;
+      ctx.save();
+      ctx.shadowBlur = 12;
+      ctx.shadowColor = glowColor;
+      ctx.strokeStyle = glowColor;
+      ctx.lineWidth = 2.5;
+
+      for (const chain of FINGER_CHAINS) {
+        ctx.beginPath();
+        chain.forEach((idx, i) => {
+          const x = (1 - lm[idx].x) * canvas.width;
+          const y = lm[idx].y * canvas.height;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+      }
+
+      // Landmarks dots
+      ctx.fillStyle = '#ffffff';
+      lm.forEach((pt) => {
+        ctx.beginPath();
+        ctx.arc((1 - pt.x) * canvas.width, pt.y * canvas.height, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      ctx.restore();
+    }
+
+    // ----------------------------------------------------
+    // Gesture Model & Shadow Clone Detection
+    // ----------------------------------------------------
+    function normalizeHand(lm) {
+      const w = lm[0];
+      const mcp = lm[9];
+      const scale = Math.hypot(mcp.x - w.x, mcp.y - w.y, (mcp.z || 0) - (w.z || 0)) || 1;
+      const out = [];
+      for (let i = 0; i < 21; i++) {
+        out.push((lm[i].x - w.x) / scale);
+        out.push((lm[i].y - w.y) / scale);
+        out.push(((lm[i].z || 0) - (w.z || 0)) / scale);
+      }
+      return out;
+    }
+
+    function predictGesture(right, left) {
+      if (!gestureModel || !right || !left) {
+        confText.textContent = '0.0%';
+        return false;
+      }
+      const input = tf.tensor2d([[...normalizeHand(right), ...normalizeHand(left)]]);
+      const output = gestureModel.predict(input);
+      const prob = output.dataSync()[0];
+      output.dispose();
+      input.dispose();
+
+      confText.textContent = `${(prob * 100).toFixed(1)}%`;
+      return prob > 0.992;
+    }
+
+    async function loadPretrainedModel() {
+      try {
+        gestureModel = await tf.loadLayersModel('gesture-model.json');
+        console.log('Pre-trained gesture model loaded successfully');
+      } catch (e) {
+        console.warn('Pretrained model not found or failed, trainer can still be used:', e);
+      }
+    }
+
+    // ----------------------------------------------------
+    // Mode Management & UI Controls
+    // ----------------------------------------------------
+    const GUIDES = {
+      combined: `
+        <div class="guide-item"><span class="guide-key">Left Hand</span> <span class="guide-text">Open Palm → Rasengan</span></div>
+        <div class="guide-item"><span class="guide-key">Right Hand</span> <span class="guide-text">Open Palm → Chidori</span></div>
+        <div class="guide-item"><span class="guide-key">Both Hands</span> <span class="guide-text">Cross Seal → Shadow Clones</span></div>
+      `,
+      ninja: `
+        <div class="guide-item"><span class="guide-key">Left Hand</span> <span class="guide-text">Open Palm → Rasengan Vortex</span></div>
+        <div class="guide-item"><span class="guide-key">Right Hand</span> <span class="guide-text">Open Palm → Chidori Lightning</span></div>
+        <div class="guide-item"><span class="guide-text" style="color: #60a5fa;">Cyan Chakra skeleton enabled</span></div>
+      `,
+      shadow: `
+        <div class="guide-item"><span class="guide-key">Cross Seal</span> <span class="guide-text">Cross index & middle fingers to spawn Clones</span></div>
+        <div class="guide-item"><span class="guide-text">Click bottom hand button to manually trigger</span></div>
+      `,
+      trainer: `
+        <div class="guide-item"><span class="guide-key">1</span> <span class="guide-text">Record Clone Sign</span></div>
+        <div class="guide-item"><span class="guide-key">2</span> <span class="guide-text">Record Other Poses</span></div>
+        <div class="guide-item"><span class="guide-text" style="color: #34d399;">Train & test neural network live</span></div>
+      `
+    };
+
+    function setMode(mode) {
+      currentMode = mode;
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.mode === mode);
+      });
+
+      guideContent.innerHTML = GUIDES[mode] || '';
+
+      // Mode-specific visuals
+      if (mode === 'ninja') {
+        vignette.classList.add('darkness-boost');
+        overlayBtn.classList.remove('visible');
+      } else if (mode === 'shadow') {
+        vignette.classList.remove('darkness-boost');
+        overlayBtn.classList.add('visible');
+        narutoFx.style.display = 'none';
+        sasukeFx.style.display = 'none';
+      } else {
+        vignette.classList.remove('darkness-boost');
+        overlayBtn.classList.toggle('visible', mode === 'combined');
+      }
+
+      // Drawer toggle
+      if (mode === 'trainer') {
+        trainerDrawer.classList.add('open');
+      } else {
+        trainerDrawer.classList.remove('open');
+      }
+    }
+
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => setMode(btn.dataset.mode));
+    });
+
+    btnSkeleton.addEventListener('click', () => {
+      showSkeleton = !showSkeleton;
+      btnSkeleton.classList.toggle('active', showSkeleton);
+    });
+
+    btnResetClones.addEventListener('click', resetClones);
+    overlayBtn.addEventListener('click', triggerClones);
+
+    closeDrawer.addEventListener('click', () => {
+      trainerDrawer.classList.remove('open');
+      if (currentMode === 'trainer') setMode('combined');
+    });
+
+    // ----------------------------------------------------
+    // Model Trainer Integration
+    // ----------------------------------------------------
+    let samples = { clone_sign: [], not_sign: [] };
+    let recordingLabel = null;
+    let recCountdownTimer = null;
+    let recDurationTimer = null;
+    const cntClone = document.getElementById('cntClone');
+    const cntOther = document.getElementById('cntOther');
+    const trainerStatus = document.getElementById('trainerStatus');
+
+    function extractHandFeatures(right, left) {
+      return [...normalizeHand(right), ...normalizeHand(left)];
+    }
+
+    function captureTrainerFrame(right, left) {
+      if (!recordingLabel || !right || !left) return;
+      samples[recordingLabel].push(extractHandFeatures(right, left));
+      cntClone.textContent = samples.clone_sign.length;
+      cntOther.textContent = samples.not_sign.length;
+    }
+
+    function startRecording(label) {
+      clearInterval(recCountdownTimer);
+      clearInterval(recDurationTimer);
+      recordingLabel = null;
+
+      let countdown = 3;
+      trainerStatus.textContent = `Get ready for "${label === 'clone_sign' ? 'Clone Sign' : 'Other'}" in ${countdown}s...`;
+
+      recCountdownTimer = setInterval(() => {
+        countdown--;
+        if (countdown > 0) {
+          trainerStatus.textContent = `Recording in ${countdown}s — strike your pose!`;
+        } else {
+          clearInterval(recCountdownTimer);
+          recordingLabel = label;
+          let remaining = 4;
+          trainerStatus.textContent = `● RECORDING (${remaining}s) — hold still!`;
+
+          recDurationTimer = setInterval(() => {
+            remaining--;
+            if (remaining > 0) {
+              trainerStatus.textContent = `● RECORDING (${remaining}s) — hold still!`;
+            } else {
+              clearInterval(recDurationTimer);
+              recordingLabel = null;
+              trainerStatus.textContent = `Captured! Total: ${samples.clone_sign.length} Clone, ${samples.not_sign.length} Other.`;
+            }
+          }, 1000);
+        }
+      }, 1000);
+    }
+
+    document.getElementById('btnRecClone').addEventListener('click', () => startRecording('clone_sign'));
+    document.getElementById('btnRecOther').addEventListener('click', () => startRecording('not_sign'));
+
+    window.addEventListener('keydown', (e) => {
+      if (e.repeat) return;
+      if (e.key === '1') startRecording('clone_sign');
+      if (e.key === '2') startRecording('not_sign');
+      if (e.key.toLowerCase() === 'r') resetClones();
+    });
+
+    document.getElementById('btnTrainModel').addEventListener('click', async () => {
+      const nP = samples.clone_sign.length;
+      const nN = samples.not_sign.length;
+      if (nP < 5 || nN < 5) {
+        trainerStatus.textContent = 'Need at least 5 samples in both classes before training.';
+        return;
+      }
+
+      const xs = [], ys = [];
+      samples.clone_sign.forEach(s => { xs.push(s); ys.push(1); });
+      samples.not_sign.forEach(s => { xs.push(s); ys.push(0); });
+
+      // Shuffle
+      for (let i = xs.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [xs[i], xs[j]] = [xs[j], xs[i]];
+        [ys[i], ys[j]] = [ys[j], ys[i]];
+      }
+
+      const xT = tf.tensor2d(xs);
+      const yT = tf.tensor1d(ys);
+
+      if (gestureModel) gestureModel.dispose();
+      gestureModel = tf.sequential();
+      gestureModel.add(tf.layers.dense({ inputShape: [126], units: 64, activation: 'relu' }));
+      gestureModel.add(tf.layers.dropout({ rate: 0.25 }));
+      gestureModel.add(tf.layers.dense({ units: 32, activation: 'relu' }));
+      gestureModel.add(tf.layers.dense({ units: 1, activation: 'sigmoid' }));
+      gestureModel.compile({ optimizer: 'adam', loss: 'binaryCrossentropy', metrics: ['accuracy'] });
+
+      const btn = document.getElementById('btnTrainModel');
+      btn.disabled = true;
+      trainerStatus.textContent = 'Training neural network...';
+
+      await gestureModel.fit(xT, yT, {
+        epochs: 45,
+        batchSize: 16,
+        shuffle: true,
+        callbacks: {
+          onEpochEnd: (ep, logs) => {
+            trainerStatus.textContent = `Epoch ${ep + 1}/45 — Accuracy: ${(logs.acc * 100).toFixed(1)}%`;
+          }
+        }
+      });
+
+      xT.dispose();
+      yT.dispose();
+      btn.disabled = false;
+      trainerStatus.textContent = `Model trained successfully! Test the seal now in camera view.`;
+    });
+
+    document.getElementById('btnExportData').addEventListener('click', () => {
+      const blob = new Blob([JSON.stringify(samples, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'naruto-gesture-data.json';
+      a.click();
+    });
+
+    const importInput = document.getElementById('importInput');
+    document.getElementById('btnImportData').addEventListener('click', () => importInput.click());
+    importInput.addEventListener('change', (e) => {
+      if (!e.target.files || !e.target.files[0]) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          const data = JSON.parse(ev.target.result);
+          if (data.clone_sign) samples.clone_sign.push(...data.clone_sign);
+          if (data.not_sign) samples.not_sign.push(...data.not_sign);
+          cntClone.textContent = samples.clone_sign.length;
+          cntOther.textContent = samples.not_sign.length;
+          trainerStatus.textContent = 'Dataset loaded successfully.';
+        } catch (err) {
+          trainerStatus.textContent = 'Error parsing JSON file.';
+        }
+      };
+      reader.readAsText(e.target.files[0]);
+    });
+
+    document.getElementById('btnSaveModel').addEventListener('click', async () => {
+      if (!gestureModel) {
+        trainerStatus.textContent = 'Train or load a model first.';
+        return;
+      }
+      await gestureModel.save('downloads://gesture-model');
+      trainerStatus.textContent = 'Model exported as JSON + binary weights.';
+    });
+
+    document.getElementById('btnClearData').addEventListener('click', () => {
+      samples = { clone_sign: [], not_sign: [] };
+      cntClone.textContent = '0';
+      cntOther.textContent = '0';
+      trainerStatus.textContent = 'Sample data cleared.';
+    });
+
+    // ----------------------------------------------------
+    // MediaPipe Holistic & Segmentation Pipelines
+    // ----------------------------------------------------
+    const selfie = new SelfieSegmentation({
+      locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation@0.1.1675465747/${f}`,
+    });
+    selfie.setOptions({ modelSelection: 1 });
+    selfie.onResults((r) => (mask = r.segmentationMask));
+
+    const holistic = new Holistic({
+      locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic@0.5.1675471629/${f}`,
+    });
+    holistic.setOptions({
+      modelComplexity: 1,
+      smoothLandmarks: true,
+      minDetectionConfidence: 0.65,
+      minTrackingConfidence: 0.65
+    });
+
+    holistic.onResults((res) => {
+      loader.classList.add('hidden');
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Render mirrored camera video background
+      ctx.save();
+      ctx.scale(-1, 1);
+      ctx.drawImage(video, -canvas.width, 0, canvas.width, canvas.height);
+      ctx.restore();
+
+      // Hand gesture inference for Clones
+      if (currentMode !== 'ninja') {
+        const hasSeal = predictGesture(res.rightHandLandmarks, res.leftHandLandmarks);
+        if (!clonesTriggered && hasSeal) {
+          triggerClones();
+        }
+      }
+
+      // Clones & Smoke Rendering
+      if (clonesTriggered) {
+        const now = performance.now();
+        customClones.forEach((cl) => {
+          if (!cl.smokeSpawned && now - cloneStartTime >= cl.delay) {
+            cl.smokeSpawned = true;
+            const centerX = cl.x + canvas.width / 2;
+            const centerY = cl.y + canvas.height / 2 - 30;
+            spawnSmoke(centerX - 15, centerY, cl.scale);
+            spawnSmoke(centerX + 15, centerY, cl.scale);
+          }
+        });
+
+        const person = grabPerson();
+        drawClones(person);
+        drawSmokes();
+      }
+
+      // Rasengan & Chidori Power Updates
+      updateRasengan(res.leftHandLandmarks || null);
+      updateChidori(res.rightHandLandmarks || null);
+
+      // Chakra Skeletons
+      if (showSkeleton) {
+        const glowColor = (currentMode === 'ninja') ? '#00fbff' : '#a855f7';
+        if (res.leftHandLandmarks) drawChakraHand(res.leftHandLandmarks, glowColor);
+        if (res.rightHandLandmarks) drawChakraHand(res.rightHandLandmarks, glowColor);
+      }
+
+      // Capture trainer data if recording
+      captureTrainerFrame(res.rightHandLandmarks, res.leftHandLandmarks);
+    });
+
+    // ----------------------------------------------------
+    // Camera Start
+    // ----------------------------------------------------
+    const camera = new Camera(video, {
+      width: 1280,
+      height: 720,
+      onFrame: async () => {
+        await selfie.send({ image: video });
+        await holistic.send({ image: video });
+      },
+    });
+
+    camera.start().catch((err) => {
+      console.error('Camera failed to start:', err);
+      loader.innerHTML = `
+        <div style="color: #ef4444; font-size: 1.25rem; font-weight: 700; margin-bottom: 0.5rem;">Webcam Access Denied</div>
+        <div style="color: var(--muted); font-size: 0.9rem; max-width: 420px; text-align: center;">Please allow camera permissions in your browser to release ninja jutsu!</div>
+      `;
+    });
+
+    // Initialize
+    loadPretrainedModel();
+    setMode('combined');
+  })();
+  </script>
+</body>
 </html>

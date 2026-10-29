@@ -25,8 +25,8 @@
       mix-blend-mode: screen; z-index: 20;
     }
 
-    #naruto-fx { width: 1600px; }
-    #sasuke-fx { width: 2400px; }
+    #naruto-fx { width: 600px; }
+    #sasuke-fx { width: 800px; }
   </style>
 </head>
 <body>
@@ -38,12 +38,12 @@
   <video id="sasuke-fx" class="fx" src="assets/sasuke.mp4" muted autoplay loop playsinline></video>
 
   <!-- TensorFlow.js -->
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0"></script>
 
   <!-- MediaPipe -->
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675466862/camera_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic@0.5.1675471629/holistic.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation@0.1.1675465747/selfie_segmentation.js"></script>
 
   <script>
   // ============================================================
@@ -98,7 +98,7 @@
 
   function updateRasengan(leftHand) {
     const open = leftHand ? checkOpen(leftHand) : false;
-    pwrRasengan += open ? 0.05 : -0.15;
+    pwrRasengan += open ? 0.04 : -0.08;
     pwrRasengan = Math.max(0, Math.min(1, pwrRasengan));
 
     if (open && !wasOpenLeft) {
@@ -124,7 +124,7 @@
 
   function updateChidori(rightHand) {
     const open = rightHand ? checkOpen(rightHand) : false;
-    pwrChidori += open ? 0.05 : -0.15;
+    pwrChidori += open ? 0.04 : -0.08;
     pwrChidori = Math.max(0, Math.min(1, pwrChidori));
 
     if (open && !wasOpenRight) {
@@ -309,7 +309,7 @@
   let mask = null;
   const selfie = new SelfieSegmentation({
     locateFile: (f) =>
-      `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${f}`,
+      `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation@0.1.1675465747/${f}`,
   });
   selfie.setOptions({ modelSelection: 1 });
   selfie.onResults((r) => (mask = r.segmentationMask));
@@ -319,7 +319,7 @@
   // ============================================================
   const holistic = new Holistic({
     locateFile: (f) =>
-      `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${f}`,
+      `https://cdn.jsdelivr.net/npm/@mediapipe/holistic@0.5.1675471629/${f}`,
   });
   holistic.setOptions({
     modelComplexity: 1,

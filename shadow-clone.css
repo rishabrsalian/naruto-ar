@@ -37,7 +37,7 @@ h1 {
 .confidence-container {
   color: white;
   text-align: center;
-  padding: none;
+  padding: 0;
 }
 
 @keyframes pulse {
