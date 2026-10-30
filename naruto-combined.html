@@ -406,7 +406,7 @@
   const selfie = new SelfieSegmentation({
     locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation@0.1.1675465747/${f}`,
   });
-  selfie.setOptions({ modelSelection: 1 });
+  selfie.setOptions({ modelSelection: 0 });
   selfie.onResults((r) => (mask = r.segmentationMask));
 
   // Holistic
@@ -414,15 +414,15 @@
     locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic@0.5.1675471629/${f}`,
   });
   holistic.setOptions({
-    modelComplexity: 1,
+    modelComplexity: 0,
     smoothLandmarks: true,
   });
 
   holistic.onResults((res) => {
-    if (!mask) return;
-
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
+    if (canvas.width !== (video.videoWidth || 640) || canvas.height !== (video.videoHeight || 480)) {
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
+    }
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     ctx.save();
@@ -459,7 +459,9 @@
     width: 640,
     height: 480,
     onFrame: async () => {
-      await selfie.send({ image: video });
+      if (clonesTriggered) {
+        await selfie.send({ image: video });
+      }
       await holistic.send({ image: video });
     },
   });

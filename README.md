@@ -22,7 +22,6 @@ Real-time hand tracking and machine learning web application that lets you unlea
 * **Loadouts**:
   * `Twin Rasengan (Both Hands)`: Dual Rasengan channeled on both palms.
   * `Rasengan (L) + Chidori (R)`: Classic elemental clash combination.
-  * `Fire Style (Katon Fireball)`: Procedural swirling fireball particle vortex with flame sparks.
 * Dynamic scaling with physical hand span.
 
 ### 2. 👥 Shadow Clone Jutsu (Cross Seal)
@@ -32,7 +31,7 @@ Real-time hand tracking and machine learning web application that lets you unlea
 
 ### 3. ⚔️ Running Ninja Battle Mini-Game (+10 Points)
 * **Rogue Ninjas**: Running enemy ninja silhouettes with waving red headbands and glowing red rogue visors dash across the screen.
-* **Hit Detection**: Strike running ninjas with your active Rasengan, Chidori, or Fireball to lit them up!
+* **Hit Detection**: Strike running ninjas with your active Rasengan or Chidori to lit them up!
 * **Scoring**: Explodes into smoke and sparks, awarding **+10 Points** per defeat with real-time score tracking.
 * **Web Audio Synthesis**: Native zero-latency sound effects.
 

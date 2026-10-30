@@ -83,7 +83,7 @@
       display: none;
       mix-blend-mode: screen;
       z-index: 20;
-      will-change: transform, opacity, left, top, width;
+      will-change: transform, opacity;
     }
 
     /* Top HUD Navigation Bar */
@@ -683,7 +683,6 @@
       <select id="jutsuPreset" class="jutsu-select" title="Choose which Jutsu to channel in hands">
         <option value="twin-rasengan">🌀 Twin Rasengan (Both Hands)</option>
         <option value="rasengan-chidori">⚡ Rasengan (L) + Chidori (R)</option>
-        <option value="fire-style">🔥 Katon: Fireball Style</option>
       </select>
 
       <div id="sealBadge" class="conf-badge" title="Cross Seal Confidence">Seal: <span id="confText">0%</span></div>
@@ -803,7 +802,7 @@
     // State & Configurations
     // ----------------------------------------------------
     let currentMode = 'combined'; // 'combined' | 'ninja' | 'shadow' | 'battle' | 'trainer'
-    let jutsuLoadout = 'twin-rasengan'; // 'twin-rasengan' | 'rasengan-chidori' | 'fire-style'
+    let jutsuLoadout = 'twin-rasengan'; // 'twin-rasengan' | 'rasengan-chidori'
     let showSkeleton = true;
     let gestureModel = null;
     let mask = null;
@@ -820,9 +819,6 @@
     // Hand hitboxes for collision detection
     let leftHandPos = null;
     let rightHandPos = null;
-
-    // Fireball particle system
-    const fireParticles = [];
 
     // DOM Elements
     const video = document.getElementById('video');
@@ -982,7 +978,7 @@
 
       const now = performance.now();
       // Spawn running ninjas at intervals
-      if (now - lastEnemySpawnTime > 1400) {
+      if (enemies.length < 6 && now - lastEnemySpawnTime > 1400) {
         enemies.push(new RunningNinjaEnemy());
         lastEnemySpawnTime = now;
       }
@@ -1022,7 +1018,7 @@
 
               // Sound and particle celebration
               playSound('hit');
-              spawnSparks(e.x, e.y - 25, (jutsuLoadout === 'fire-style') ? '#f97316' : '#38bdf8');
+              spawnSparks(e.x, e.y - 25, '#38bdf8');
               spawnSmoke(e.x, e.y - 25, 0.7);
               spawnFloatingScore(e.x, e.y - 45, '+10');
               break;
@@ -1094,6 +1090,7 @@
       { x: -100, y: 150, scale: 0.6,  delay: 2000, smokeSpawned: false },
       { x:  100, y: 150, scale: 0.6,  delay: 2150, smokeSpawned: false },
     ];
+    const sortedClones = [...customClones].sort((a, b) => b.delay - a.delay);
 
     const SMOKE_FOLDERS = ['smoke_1', 'smoke_2', 'smoke_3'];
     const SMOKE_FRAME_COUNT = 5;
@@ -1146,8 +1143,10 @@
 
     function grabPerson() {
       if (!mask) return null;
-      _offscreen.width = canvas.width;
-      _offscreen.height = canvas.height;
+      if (_offscreen.width !== canvas.width || _offscreen.height !== canvas.height) {
+        _offscreen.width = canvas.width;
+        _offscreen.height = canvas.height;
+      }
 
       _offCtx.save();
       _offCtx.scale(-1, 1);
@@ -1167,9 +1166,7 @@
     function drawClones(person) {
       if (!person) return;
       const now = performance.now();
-      const sorted = [...customClones].sort((a, b) => b.delay - a.delay);
-
-      sorted.forEach((cl) => {
+      sortedClones.forEach((cl) => {
         if (now - cloneStartTime >= cl.delay) {
           ctx.save();
           ctx.translate(cl.x + canvas.width * (1 - cl.scale) / 2, cl.y);
@@ -1248,21 +1245,17 @@
       // 1. Geometric cross-seal check
       const geomConf = checkGeometricCrossSign(left, right);
 
-      // 2. Neural model prediction (test both permutations to prevent handedness swap bugs)
+      // 2. Neural model prediction fallback only if geometric test isn't conclusive
       let mlConf = 0;
-      if (gestureModel) {
+      if (geomConf < 0.70 && gestureModel) {
         try {
-          const in1 = tf.tensor2d([[...normalizeHand(right), ...normalizeHand(left)]]);
-          const in2 = tf.tensor2d([[...normalizeHand(left), ...normalizeHand(right)]]);
-          const out1 = gestureModel.predict(in1);
-          const out2 = gestureModel.predict(in2);
-          const p1 = out1.dataSync()[0];
-          const p2 = out2.dataSync()[0];
-          mlConf = Math.max(p1, p2);
-          in1.dispose();
-          in2.dispose();
-          out1.dispose();
-          out2.dispose();
+          mlConf = tf.tidy(() => {
+            const in1 = tf.tensor2d([[...normalizeHand(right), ...normalizeHand(left)]]);
+            const in2 = tf.tensor2d([[...normalizeHand(left), ...normalizeHand(right)]]);
+            const p1 = gestureModel.predict(in1).dataSync()[0];
+            const p2 = gestureModel.predict(in2).dataSync()[0];
+            return Math.max(p1, p2);
+          });
         } catch (e) {}
       }
 
@@ -1309,46 +1302,11 @@
       return count >= 3;
     }
 
-    // Procedural Fireball Particles
-    function spawnFireballParticles(x, y, radius) {
-      for (let i = 0; i < 6; i++) {
-        const angle = Math.random() * Math.PI * 2;
-        const dist = Math.random() * radius * 0.7;
-        fireParticles.push({
-          x: x + Math.cos(angle) * dist,
-          y: y + Math.sin(angle) * dist,
-          vx: (Math.random() - 0.5) * 3,
-          vy: -2 - Math.random() * 4,
-          radius: 12 + Math.random() * 16,
-          color: Math.random() < 0.6 ? '#f97316' : (Math.random() < 0.5 ? '#ef4444' : '#fbbf24'),
-          alpha: 0.85
-        });
-      }
-    }
-
-    function drawFireParticles(c) {
-      for (let i = fireParticles.length - 1; i >= 0; i--) {
-        const p = fireParticles[i];
-        p.x += p.vx;
-        p.y += p.vy;
-        p.radius *= 0.94;
-        p.alpha -= 0.03;
-
-        if (p.alpha <= 0 || p.radius < 1) {
-          fireParticles.splice(i, 1);
-          continue;
-        }
-
-        c.save();
-        c.globalAlpha = p.alpha;
-        c.fillStyle = p.color;
-        c.shadowColor = p.color;
-        c.shadowBlur = 15;
-        c.beginPath();
-        c.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-        c.fill();
-        c.restore();
-      }
+        function setFx(el, x, y, width, opacity) {
+      el.style.transform = `translate3d(${x}px, ${y}px, 0) translate(-50%, -50%)`;
+      el.style.width = `${width}px`;
+      el.style.opacity = opacity;
+      el.style.display = 'block';
     }
 
     function updateDualNinjaPowers(leftHand, rightHand) {
@@ -1359,7 +1317,6 @@
         return;
       }
 
-      // Check openness
       const openL = leftHand ? checkOpen(leftHand) : false;
       const openR = rightHand ? checkOpen(rightHand) : false;
 
@@ -1369,7 +1326,6 @@
       pwrRight += openR ? 0.05 : -0.09;
       pwrRight = Math.max(0, Math.min(1, pwrRight));
 
-      // Play / restart video FX on trigger
       if (openL && !wasOpenLeft) {
         narutoFxLeft.currentTime = 0;
         narutoFxLeft.play().catch(() => {});
@@ -1386,7 +1342,7 @@
       wasOpenLeft = openL;
       wasOpenRight = openR;
 
-      // 1. LEFT HAND POWER
+      // 1. Left Hand Power (Rasengan)
       if (pwrLeft > 0.01 && leftHand) {
         const wrist = leftHand[0];
         const knk = leftHand[9];
@@ -1396,23 +1352,13 @@
         const screenY = palmCenter.y * window.innerHeight;
         leftHandPos = { x: screenX, y: screenY };
 
-        if (jutsuLoadout === 'fire-style') {
-          narutoFxLeft.style.display = 'none';
-          spawnFireballParticles(screenX, screenY, Math.max(40, handSpan * 1.5));
-        } else {
-          // Rasengan on Left Hand
-          narutoFxLeft.style.width = `${Math.max(300, Math.min(850, handSpan * 3.6))}px`;
-          narutoFxLeft.style.left = `${screenX}px`;
-          narutoFxLeft.style.top = `${screenY}px`;
-          narutoFxLeft.style.display = 'block';
-          narutoFxLeft.style.opacity = pwrLeft;
-        }
+        setFx(narutoFxLeft, screenX, screenY, Math.max(300, Math.min(850, handSpan * 3.6)), pwrLeft);
       } else {
         leftHandPos = null;
         narutoFxLeft.style.display = 'none';
       }
 
-      // 2. RIGHT HAND POWER
+      // 2. Right Hand Power (Rasengan or Chidori)
       if (pwrRight > 0.01 && rightHand) {
         const wrist = rightHand[0];
         const knk = rightHand[9];
@@ -1423,25 +1369,11 @@
         rightHandPos = { x: screenX, y: screenY };
 
         if (jutsuLoadout === 'twin-rasengan') {
-          // Twin Rasengan on Right Hand as well!
           sasukeFx.style.display = 'none';
-          narutoFxRight.style.width = `${Math.max(300, Math.min(850, handSpan * 3.6))}px`;
-          narutoFxRight.style.left = `${screenX}px`;
-          narutoFxRight.style.top = `${screenY}px`;
-          narutoFxRight.style.display = 'block';
-          narutoFxRight.style.opacity = pwrRight;
-        } else if (jutsuLoadout === 'fire-style') {
-          narutoFxRight.style.display = 'none';
-          sasukeFx.style.display = 'none';
-          spawnFireballParticles(screenX, screenY, Math.max(40, handSpan * 1.5));
+          setFx(narutoFxRight, screenX, screenY, Math.max(300, Math.min(850, handSpan * 3.6)), pwrRight);
         } else {
-          // Chidori on Right Hand
           narutoFxRight.style.display = 'none';
-          sasukeFx.style.width = `${Math.max(380, Math.min(1000, handSpan * 4.4))}px`;
-          sasukeFx.style.left = `${screenX}px`;
-          sasukeFx.style.top = `${screenY}px`;
-          sasukeFx.style.display = 'block';
-          sasukeFx.style.opacity = pwrRight;
+          setFx(sasukeFx, screenX, screenY, Math.max(380, Math.min(1000, handSpan * 4.4)), pwrRight);
         }
       } else {
         rightHandPos = null;
@@ -1499,7 +1431,7 @@
       `,
       ninja: `
         <div class="guide-item"><span class="guide-key">Both Hands</span> <span class="guide-text">Rasengan channels on BOTH hands when opened</span></div>
-        <div class="guide-item"><span class="guide-key">Loadout</span> <span class="guide-text">Use Jutsu dropdown for Twin Rasengan, Chidori, or Fire Style</span></div>
+        <div class="guide-item"><span class="guide-key">Loadout</span> <span class="guide-text">Choose Twin Rasengan or Chidori in dropdown</span></div>
       `,
       shadow: `
         <div class="guide-item"><span class="guide-key">Cross Seal</span> <span class="guide-text">Cross index & middle fingers in front of chest</span></div>
@@ -1725,23 +1657,25 @@
     const selfie = new SelfieSegmentation({
       locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation@0.1.1675465747/${f}`,
     });
-    selfie.setOptions({ modelSelection: 1 });
+    selfie.setOptions({ modelSelection: 0 });
     selfie.onResults((r) => (mask = r.segmentationMask));
 
     const holistic = new Holistic({
       locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic@0.5.1675471629/${f}`,
     });
     holistic.setOptions({
-      modelComplexity: 1,
+      modelComplexity: 0,
       smoothLandmarks: true,
-      minDetectionConfidence: 0.65,
-      minTrackingConfidence: 0.65
+      minDetectionConfidence: 0.55,
+      minTrackingConfidence: 0.55
     });
 
     holistic.onResults((res) => {
       loader.classList.add('hidden');
-      canvas.width = video.videoWidth || 640;
-      canvas.height = video.videoHeight || 480;
+      if (canvas.width !== (video.videoWidth || 640) || canvas.height !== (video.videoHeight || 480)) {
+        canvas.width = video.videoWidth || 640;
+        canvas.height = video.videoHeight || 480;
+      }
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -1777,9 +1711,8 @@
         drawSmokes();
       }
 
-      // Dual Hand Ninja Powers (Twin Rasengan, Chidori, Fireball)
+      // Dual Hand Ninja Powers (Twin Rasengan, Chidori)
       updateDualNinjaPowers(res.leftHandLandmarks || null, res.rightHandLandmarks || null);
-      drawFireParticles(ctx);
 
       // Ninja Battle Mini-Game (Running Ninjas)
       updateAndDrawBattle(ctx);
@@ -1799,10 +1732,12 @@
     // Camera Start
     // ----------------------------------------------------
     const camera = new Camera(video, {
-      width: 1280,
-      height: 720,
+      width: 640,
+      height: 480,
       onFrame: async () => {
-        await selfie.send({ image: video });
+        if (clonesTriggered && (currentMode === 'combined' || currentMode === 'shadow')) {
+          await selfie.send({ image: video });
+        }
         await holistic.send({ image: video });
       },
     });

@@ -125,7 +125,7 @@ const selfie = new SelfieSegmentation({
   locateFile: (f) =>
     `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation@0.1.1675465747/${f}`,
 });
-selfie.setOptions({ modelSelection: 1 });
+selfie.setOptions({ modelSelection: 0 });
 selfie.onResults((r) => (mask = r.segmentationMask));
 
 const holistic = new Holistic({
@@ -133,7 +133,7 @@ const holistic = new Holistic({
     `https://cdn.jsdelivr.net/npm/@mediapipe/holistic@0.5.1675471629/${f}`,
 });
 holistic.setOptions({
-  modelComplexity: 1,
+  modelComplexity: 0,
   smoothLandmarks: true,
   minDetectionConfidence: 0.65,
   minTrackingConfidence: 0.65
@@ -146,7 +146,9 @@ const camera = new Camera(video, {
   width: 640,
   height: 480,
   onFrame: async () => {
-    await selfie.send({ image: video });
+    if (clonesTriggered) {
+      await selfie.send({ image: video });
+    }
     await holistic.send({ image: video });
   },
 });
@@ -205,8 +207,10 @@ function drawSmokes() {
 // Results Loop
 // ----------------------
 holistic.onResults((res) => {
-  canvas.width = video.videoWidth || 640;
-  canvas.height = video.videoHeight || 480;
+  if (canvas.width !== (video.videoWidth || 640) || canvas.height !== (video.videoHeight || 480)) {
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+  }
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   // Draw live webcam background (mirrored)
@@ -271,8 +275,10 @@ const _cloneCtx = _cloneCanvas.getContext("2d");
 
 function grabPerson() {
   if (!mask) return null;
-  _cloneCanvas.width = canvas.width;
-  _cloneCanvas.height = canvas.height;
+  if (_cloneCanvas.width !== canvas.width || _cloneCanvas.height !== canvas.height) {
+    _cloneCanvas.width = canvas.width;
+    _cloneCanvas.height = canvas.height;
+  }
 
   _cloneCtx.save();
   _cloneCtx.scale(-1, 1);
